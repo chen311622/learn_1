@@ -4,7 +4,74 @@ import { askLLM, Task } from './llm';
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('code-explainer.explainCode', () => run('explain')),
-    vscode.commands.registerCommand('code-explainer.generateComment', () => run('comment'))
+    vscode.commands.registerCommand('code-explainer.generateComment', () => run('comment')),
+    vscode.commands.registerCommand('code-explainer.selectModel', selectModel)
+  );
+}
+
+/**
+ * 以交互方式切换服务商与模型，写回工作区/用户设置。
+ */
+async function selectModel() {
+  const cfg = vscode.workspace.getConfiguration('codeExplainer');
+
+  // 1. 选服务商
+  const providers = [
+    { label: '本地 Ollama', value: 'ollama' as const },
+    { label: 'DeepSeek', value: 'deepseek' as const },
+    { label: 'OpenAI', value: 'openai' as const }
+  ];
+  const currentProvider = cfg.get<string>('provider', 'ollama');
+  const pickedProvider = await vscode.window.showQuickPick(
+    providers.map((p) => ({ label: p.label, value: p.value, picked: p.value === currentProvider })),
+    { placeHolder: `当前服务商：${currentProvider}` }
+  );
+  if (!pickedProvider) {
+    return;
+  }
+  await cfg.update('provider', pickedProvider.value, vscode.ConfigurationTarget.Global);
+
+  // 2. 选 / 填模型名
+  let modelKey = '';
+  let presets: string[] = [];
+  if (pickedProvider.value === 'ollama') {
+    modelKey = 'ollama.model';
+    presets = ['qwen2.5-coder:7b', 'qwen2.5-coder:3b', 'qwen2.5-coder:1.5b-base'];
+  } else if (pickedProvider.value === 'deepseek') {
+    modelKey = 'deepseek.model';
+    presets = ['deepseek-chat', 'deepseek-reasoner'];
+  } else {
+    modelKey = 'openai.model';
+    presets = ['gpt-4o-mini', 'gpt-4o'];
+  }
+
+  const currentModel = cfg.get<string>(modelKey, '');
+  const items: vscode.QuickPickItem[] = [
+    ...presets.map((m) => ({ label: m, picked: m === currentModel })),
+    { label: '$(edit) 手动输入模型名…' }
+  ];
+  const pickedModel = await vscode.window.showQuickPick(items, {
+    placeHolder: `当前模型：${currentModel}（选择或手动输入）`
+  });
+  if (!pickedModel) {
+    return;
+  }
+
+  let model = pickedModel.label;
+  if (model.startsWith('$(edit)')) {
+    const input = await vscode.window.showInputBox({
+      prompt: '请输入模型名',
+      value: currentModel
+    });
+    if (!input) {
+      return;
+    }
+    model = input.trim();
+  }
+  await cfg.update(modelKey, model, vscode.ConfigurationTarget.Global);
+
+  vscode.window.showInformationMessage(
+    `Code Explainer 已切换：${pickedProvider.label} / ${model}`
   );
 }
 

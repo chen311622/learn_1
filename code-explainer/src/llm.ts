@@ -2,13 +2,18 @@ import * as vscode from 'vscode';
 
 export type Task = 'explain' | 'comment';
 
+export type Provider = 'ollama' | 'openai' | 'deepseek';
+
 export interface LlmOptions {
-  provider?: 'ollama' | 'openai';
+  provider?: Provider;
   ollamaEndpoint?: string;
   ollamaModel?: string;
   openaiBaseUrl?: string;
   openaiApiKey?: string;
   openaiModel?: string;
+  deepseekBaseUrl?: string;
+  deepseekApiKey?: string;
+  deepseekModel?: string;
 }
 
 function buildPrompt(code: string, task: Task, languageId: string): string {
@@ -26,14 +31,18 @@ function resolveOptions(opts: LlmOptions) {
   const root = vscode.workspace.getConfiguration('codeExplainer');
   const ollama = vscode.workspace.getConfiguration('codeExplainer.ollama');
   const openai = vscode.workspace.getConfiguration('codeExplainer.openai');
+  const deepseek = vscode.workspace.getConfiguration('codeExplainer.deepseek');
 
   return {
-    provider: opts.provider ?? root.get<'ollama' | 'openai'>('provider', 'ollama'),
+    provider: opts.provider ?? root.get<Provider>('provider', 'ollama'),
     ollamaEndpoint: (opts.ollamaEndpoint ?? ollama.get<string>('endpoint', 'http://localhost:11434')).replace(/\/$/, ''),
     ollamaModel: opts.ollamaModel ?? ollama.get<string>('model', 'qwen2.5-coder:7b'),
     openaiBaseUrl: (opts.openaiBaseUrl ?? openai.get<string>('baseUrl', 'https://api.openai.com/v1')).replace(/\/$/, ''),
     openaiApiKey: opts.openaiApiKey ?? openai.get<string>('apiKey', ''),
-    openaiModel: opts.openaiModel ?? openai.get<string>('model', 'gpt-4o-mini')
+    openaiModel: opts.openaiModel ?? openai.get<string>('model', 'gpt-4o-mini'),
+    deepseekBaseUrl: (opts.deepseekBaseUrl ?? deepseek.get<string>('baseUrl', 'https://api.deepseek.com')).replace(/\/$/, ''),
+    deepseekApiKey: opts.deepseekApiKey ?? deepseek.get<string>('apiKey', ''),
+    deepseekModel: opts.deepseekModel ?? deepseek.get<string>('model', 'deepseek-chat')
   };
 }
 
@@ -73,9 +82,16 @@ async function callOllama(prompt: string, endpoint: string, model: string): Prom
   return data.message?.content ?? '';
 }
 
-async function callPaidApi(prompt: string, baseUrl: string, apiKey: string, model: string): Promise<string> {
+async function callPaidApi(
+  prompt: string,
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  providerLabel: string,
+  keyConfigName: string
+): Promise<string> {
   if (!apiKey) {
-    throw new Error('未配置 codeExplainer.openai.apiKey');
+    throw new Error(`未配置 ${keyConfigName}`);
   }
   const res = await fetchWithTimeout(
     `${baseUrl}/chat/completions`,
@@ -93,7 +109,7 @@ async function callPaidApi(prompt: string, baseUrl: string, apiKey: string, mode
     120000
   );
   if (!res.ok) {
-    throw new Error(`API 请求失败 ${res.status}: ${await res.text()}`);
+    throw new Error(`${providerLabel} 请求失败 ${res.status}: ${await res.text()}`);
   }
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
@@ -114,7 +130,20 @@ export async function askLLM(
   const prompt = buildPrompt(code, task, languageId);
   const o = resolveOptions(options);
 
-  return o.provider === 'openai'
-    ? callPaidApi(prompt, o.openaiBaseUrl, o.openaiApiKey, o.openaiModel)
-    : callOllama(prompt, o.ollamaEndpoint, o.ollamaModel);
+  switch (o.provider) {
+    case 'openai':
+      return callPaidApi(prompt, o.openaiBaseUrl, o.openaiApiKey, o.openaiModel, 'OpenAI', 'codeExplainer.openai.apiKey');
+    case 'deepseek':
+      return callPaidApi(
+        prompt,
+        o.deepseekBaseUrl,
+        o.deepseekApiKey,
+        o.deepseekModel,
+        'DeepSeek',
+        'codeExplainer.deepseek.apiKey'
+      );
+    case 'ollama':
+    default:
+      return callOllama(prompt, o.ollamaEndpoint, o.ollamaModel);
+  }
 }
