@@ -42,7 +42,7 @@ function resolveOptions(opts: LlmOptions) {
     openaiModel: opts.openaiModel ?? openai.get<string>('model', 'gpt-4o-mini'),
     deepseekBaseUrl: (opts.deepseekBaseUrl ?? deepseek.get<string>('baseUrl', 'https://api.deepseek.com')).replace(/\/$/, ''),
     deepseekApiKey: opts.deepseekApiKey ?? deepseek.get<string>('apiKey', ''),
-    deepseekModel: opts.deepseekModel ?? deepseek.get<string>('model', 'deepseek-chat')
+    deepseekModel: opts.deepseekModel ?? deepseek.get<string>('model', 'deepseek-flash')
   };
 }
 

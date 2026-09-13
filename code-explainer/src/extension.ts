@@ -39,7 +39,7 @@ async function selectModel() {
     presets = ['qwen2.5-coder:7b', 'qwen2.5-coder:3b', 'qwen2.5-coder:1.5b-base'];
   } else if (pickedProvider.value === 'deepseek') {
     modelKey = 'deepseek.model';
-    presets = ['deepseek-chat', 'deepseek-reasoner'];
+    presets = ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-v4-flash'];
   } else {
     modelKey = 'openai.model';
     presets = ['gpt-4o-mini', 'gpt-4o'];
